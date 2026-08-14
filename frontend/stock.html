@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Detail — Stock Research Scanner</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body data-page="stock">
+  <div class="shell">
+    <div class="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <span class="brand-name">Stock Research Scanner</span>
+        <span class="brand-sub">NSE · TECHNICAL + DELIVERY</span>
+      </div>
+      <div class="nav-links">
+        <a href="index.html">Dashboard</a>
+        <a href="scanner.html">Scanner</a>
+      </div>
+    </div>
+
+    <div class="search-panel">
+      <form id="stock-search-form" autocomplete="off">
+        <div class="search-box">
+          <input id="stock-search-input" type="text" placeholder="Search another stock…" />
+          <button type="submit">Search</button>
+          <div id="autocomplete-list" class="autocomplete"></div>
+        </div>
+      </form>
+    </div>
+
+    <div id="market-status-strip" class="status-strip">Loading market status…</div>
+
+    <div id="stock-container"></div>
+
+    <div class="footer-disclaimer">
+      This dashboard is a quantitative stock-screening and research tool. The displayed indicators
+      and scores are generated from predefined technical and market-data rules. They are not
+      personalized investment advice, a guarantee of returns, or a recommendation to buy or sell
+      any security. Users should independently evaluate investments and consider consulting a
+      qualified financial professional where appropriate.
+    </div>
+  </div>
+
+  <script>window.__API_BASE__ = "http://localhost:8000/api"; /* set to your Render backend URL */</script>
+  <script src="js/app.js"></script>
+</body>
+</html>
