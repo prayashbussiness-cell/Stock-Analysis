@@ -131,6 +131,11 @@ HTML file to point at your deployed Render backend URL, e.g.:
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Add the env vars from `.env.example` in the Render dashboard
 - Add a separate Cron Job service for `python -m jobs.daily_update`
+- `runtime.txt` pins Python to 3.11.9 — **do not remove it**. Render's
+  default Python (3.14 at time of writing) has no pre-built pandas wheel
+  yet, which forces pandas to compile from source and fails with a
+  Cython/GCC `[[maybe_unused]]` error. 3.11/3.12 have ready-made wheels
+  for every pinned dependency, so the build just downloads binaries.
 
 **Frontend → Netlify**
 - New site from Git, base directory `frontend/`
