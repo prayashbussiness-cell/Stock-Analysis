@@ -131,11 +131,20 @@ HTML file to point at your deployed Render backend URL, e.g.:
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Add the env vars from `.env.example` in the Render dashboard
 - Add a separate Cron Job service for `python -m jobs.daily_update`
-- `runtime.txt` pins Python to 3.11.9 — **do not remove it**. Render's
-  default Python (3.14 at time of writing) has no pre-built pandas wheel
-  yet, which forces pandas to compile from source and fails with a
-  Cython/GCC `[[maybe_unused]]` error. 3.11/3.12 have ready-made wheels
-  for every pinned dependency, so the build just downloads binaries.
+- `runtime.txt` pins Python to 3.11.9, but **Render's Python buildpack often
+  ignores `runtime.txt` and builds with its current default (3.14 at time
+  of writing) unless you also set it explicitly.** Do this in the Render
+  dashboard for the backend service:
+  - Go to your Web Service → **Environment** tab
+  - Add an environment variable: `PYTHON_VERSION` = `3.11.9`
+  - Save, then trigger **Manual Deploy → Clear build cache & deploy**
+    (a stale cached build is a common reason the old Python version keeps
+    reappearing even after this change)
+  - This matters because Python 3.14 has no pre-built pandas/numpy wheels
+    yet, forcing pip to compile them from source, which fails with a
+    Cython/GCC `[[maybe_unused]]` error unrelated to your code. 3.11
+    has ready-made wheels for everything in `requirements.txt`, so the
+    build just downloads binaries instead of compiling anything.
 
 **Frontend → Netlify**
 - New site from Git, base directory `frontend/`
