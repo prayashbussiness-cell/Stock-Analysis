@@ -250,31 +250,83 @@ def generate_price_path(current_price: float, target_price: float, months: int =
     return path
 
 
+def _verdict_map_from_sections(entry: dict) -> dict:
+    """
+    Builds an {id: verdict} map straight from entry["sections"] — the
+    single source of truth for verdicts. We deliberately do NOT read
+    verdicts from final_summary.checklist: that array requires the model to
+    re-type each section's title as free text a second time, and it doesn't
+    always match the canonical title exactly (e.g. "Candlestick Analysis"
+    vs "Candlestick Pattern Analysis"), which silently breaks any
+    title-string matching downstream. Matching by "id" (a small fixed enum
+    we specify in the prompt) is far more reliable than matching by title.
+
+    Falls back to positional matching (section N -> SECTION_ORDER[N]) for
+    any entry whose "id" doesn't match a known one, since the prompt also
+    requires sections to be returned in a fixed order — this covers the
+    rarer case where the model gets the id slug wrong too.
+    """
+    sections = entry.get("sections") or []
+    known_ids = {sid for sid, _ in SECTION_ORDER}
+
+    by_id = {}
+    unmatched_positional = []
+    for i, s in enumerate(sections):
+        sid = (s.get("id") or "").strip().lower()
+        verdict = (s.get("verdict") or "").strip().lower()
+        if verdict not in ("positive", "negative"):
+            verdict = "negative"
+        if sid in known_ids:
+            by_id[sid] = verdict
+        else:
+            unmatched_positional.append((i, verdict))
+
+    # Positional fallback for anything not matched by id.
+    for i, verdict in unmatched_positional:
+        if i < len(SECTION_ORDER):
+            fallback_id = SECTION_ORDER[i][0]
+            by_id.setdefault(fallback_id, verdict)
+
+    return by_id
+
+
 def compute_scorecard(entry: dict) -> dict:
     """
     Computes the weighted scorecard total in Python from the model's stated
-    verdicts, using the fixed SECTION_WEIGHTS business rule — never trusts
-    the model to do this arithmetic itself. Returns section rows in the
-    canonical SECTION_ORDER (not whatever order the model returned).
+    per-section verdicts (matched by id, see _verdict_map_from_sections),
+    using the fixed SECTION_WEIGHTS business rule — never trusts the model
+    to do this arithmetic itself. Returns section rows in the canonical
+    SECTION_ORDER (not whatever order the model returned).
     """
-    checklist = (entry.get("final_summary") or {}).get("checklist") or []
-    verdict_by_title = {}
-    for item in checklist:
-        title = (item.get("section") or "").strip()
-        verdict_by_title[title] = (item.get("verdict") or "").strip().lower()
+    verdict_by_id = _verdict_map_from_sections(entry)
 
     rows = []
     total_score = 0
-    for _, title in SECTION_ORDER:
+    for sid, title in SECTION_ORDER:
         weight = SECTION_WEIGHTS.get(title, 0)
-        verdict = verdict_by_title.get(title, "negative")
-        if verdict not in ("positive", "negative"):
-            verdict = "negative"
+        verdict = verdict_by_id.get(sid, "negative")
         if verdict == "positive":
             total_score += weight
         rows.append({"title": title, "weight": weight, "verdict": verdict})
 
     return {"sections": rows, "total_score": total_score, "max_score": TOTAL_WEIGHT}
+
+
+def rebuild_final_checklist(entry: dict) -> list:
+    """
+    Rebuilds final_summary.checklist server-side from the same canonical
+    per-section verdicts used for the scorecard (see
+    _verdict_map_from_sections), instead of trusting whatever free-text
+    checklist the model wrote separately. This guarantees the Final Summary
+    card, the PDF checklist table, and the Scorecard always agree with each
+    other and with the numbered section verdicts — they're now all reading
+    from one source of truth instead of three independently-authored copies.
+    """
+    verdict_by_id = _verdict_map_from_sections(entry)
+    return [
+        {"section": title, "verdict": verdict_by_id.get(sid, "negative")}
+        for sid, title in SECTION_ORDER
+    ]
 
 
 async def generate_research_report(tickers: list[str]) -> dict:
@@ -338,6 +390,10 @@ async def generate_research_report(tickers: list[str]) -> dict:
             "disclaimer": PRICE_PROJECTION_DISCLAIMER,
         }
         entry["scorecard"] = compute_scorecard(entry)
+        # Overwrite the model's own checklist with one derived from the same
+        # canonical per-section verdicts as the scorecard, so the two can
+        # never disagree (see rebuild_final_checklist docstring).
+        entry.setdefault("final_summary", {})["checklist"] = rebuild_final_checklist(entry)
 
     return data
 
