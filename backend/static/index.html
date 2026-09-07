@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEEP//TERMINAL — Equity Research Console</title>
+<style>
+  :root{
+    --bg: #0a0a0a;
+    --bg-deep: #050505;
+    --fg: #f2f3f2;
+    --fg-dim: #a9b0ac;
+    --green: #128a4e;
+    --green-fin: #17a35c;
+    --green-dim: #128a4e33;
+    --red: #ff1744;
+    --red-dim: #ff174433;
+    --border: #1c2e22;
+    --amber: #d4a72c;
+    --blue: #3b82c4;
+  }
+
+  *{box-sizing:border-box;}
+
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg-deep);
+    color:var(--fg);
+    font-family:'JetBrains Mono','Fira Code','Courier New',monospace;
+    font-size:16px;
+    overflow-x:hidden;
+  }
+
+  /* CRT scanline + grid overlay */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:9999;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(0,255,102,0.035) 0px,
+        rgba(0,255,102,0.035) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+    mix-blend-mode:overlay;
+  }
+  body::after{
+    content:"";
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:9998;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,0) 60%, rgba(0,0,0,0.55) 100%);
+  }
+
+  .glow{ text-shadow:0 0 6px currentColor; }
+
+  a { color:var(--green); }
+
+  ::selection{ background:var(--green-dim); color:var(--green); }
+
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:var(--bg); }
+  ::-webkit-scrollbar-thumb{ background:#1f3325; border:1px solid var(--border); }
+  ::-webkit-scrollbar-thumb:hover{ background:#28422f; }
+
+  .wrap{
+    max-width:1100px;
+    margin:0 auto;
+    padding:16px 16px 60px;
+    position:relative;
+    z-index:1;
+  }
+
+  /* ---------------- Header bar ---------------- */
+  .header-bar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 16px;
+    background:linear-gradient(180deg, #0d0d0d, #070707);
+    border:1px solid var(--border);
+    box-shadow: inset 0 0 20px rgba(0,255,102,0.03);
+    margin-bottom:14px;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-weight:700;
+    letter-spacing:2px;
+    color:var(--green);
+  }
+  .brand .bar{ width:8px; height:18px; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 1.4s infinite ease-in-out; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+
+  .status-cluster{ display:flex; gap:18px; flex-wrap:wrap; font-size:13.5px; color:var(--fg-dim); }
+  .status-cluster span b{ color:var(--green); font-weight:600; }
+  .status-cluster .dot{
+    display:inline-block; width:7px; height:7px; border-radius:50%;
+    background:var(--green); box-shadow:0 0 6px var(--green); margin-right:6px;
+    animation:blink 1.6s infinite;
+  }
+  @keyframes blink{ 0%,60%{opacity:1;} 80%{opacity:.3;} 100%{opacity:1;} }
+
+  /* ---------------- Command bar ---------------- */
+  .command-bar{
+    display:flex; flex-wrap:wrap; gap:12px;
+    padding:16px;
+    background:#0c0c0c;
+    border:1px solid var(--border);
+    margin-bottom:14px;
+  }
+  .field{ display:flex; flex-direction:column; gap:6px; flex:1 1 220px; }
+  .field label{
+    font-size:12.5px; letter-spacing:1.5px; color:var(--fg-dim);
+    text-transform:uppercase;
+  }
+  .field input{
+    background:var(--bg-deep);
+    border:1px solid var(--border);
+    color:var(--fg);
+    font-family:inherit;
+    font-size:16px;
+    padding:10px 12px;
+    outline:none;
+    letter-spacing:1px;
+  }
+  .field input:focus{
+    border-color:var(--green);
+    box-shadow:0 0 10px var(--green-dim);
+  }
+  .field input::placeholder{ color:#3a3a3a; }
+
+  .btn{
+    border:1px solid var(--green);
+    background:transparent;
+    color:var(--green);
+    font-family:inherit;
+    font-weight:700;
+    letter-spacing:2px;
+    padding:0 26px;
+    cursor:pointer;
+    text-transform:uppercase;
+    align-self:flex-end;
+    height:41px;
+    transition:all .15s ease;
+    position:relative;
+    overflow:hidden;
+  }
+  .btn:hover:not(:disabled){
+    background:var(--green);
+    color:#001a08;
+    box-shadow:0 0 22px var(--green-dim), 0 0 8px var(--green);
+  }
+  .btn:active:not(:disabled){ transform:scale(0.97); }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+  .btn-row{ display:flex; align-items:flex-end; }
+
+  /* ---------------- Console ---------------- */
+  .console{
+    background:var(--bg-deep);
+    border:1px solid var(--border);
+    padding:24px 20px;
+    min-height:90px;
+    margin-bottom:14px;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    gap:14px;
+  }
+  .status-line{
+    font-size:16px;
+    letter-spacing:1.5px;
+    color:var(--fg);
+    text-align:center;
+  }
+  .status-line.tag-err{ color:var(--red); }
+  .status-line.tag-ok{ color:var(--green-fin); }
+  .cursor{ display:inline-block; width:8px; height:14px; background:var(--green); vertical-align:middle; animation:blink 1s infinite; margin-left:4px; box-shadow:0 0 6px var(--green); }
+
+  .progress-wrap{ margin-top:2px; display:none; width:100%; max-width:520px; }
+  .progress-wrap.show{ display:block; }
+  .progress-track{
+    width:100%; height:9px; background:#111; border:1px solid var(--border); overflow:hidden;
+  }
+  .progress-fill{
+    height:100%; width:0%; background:linear-gradient(90deg,#0c5f36,var(--green));
+    box-shadow:0 0 10px var(--green); transition:width .25s linear;
+  }
+  .progress-label{ font-size:12.5px; color:var(--fg-dim); margin-top:6px; display:flex; justify-content:space-between; }
+
+  /* ---------------- Results (institutional-report card design) ---------------- */
+  .results{ display:none; flex-direction:column; gap:16px; }
+  .results.show{ display:flex; }
+
+  .report-card{
+    border:1px solid var(--border);
+    background:#0d1117;
+    border-radius:14px;
+    padding:22px 24px;
+  }
+
+  /* --- Header card: name, exchange line, recommendation pill, stat strip --- */
+  .report-header{
+    display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:14px;
+    margin-bottom:18px;
+  }
+  .report-header .sym{ font-size:24px; font-weight:700; color:var(--fg); letter-spacing:.5px; }
+  .report-header .company-sub{ color:var(--fg-dim); font-size:13.5px; margin-top:4px; }
+  .rec-pill{
+    display:inline-block; padding:11px 22px; border-radius:999px; font-weight:700;
+    letter-spacing:1px; font-size:13.5px; white-space:nowrap; color:#04150c;
+  }
+  .rec-pill.pos{ background:var(--green-fin); color:#03150a; }
+  .rec-pill.wait{ background:var(--blue); color:#04101f; }
+  .rec-pill.neg{ background:var(--red); color:#1a0304; }
+
+  .stat-strip{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px;
+  }
+  .stat-card{
+    background:#11161d; border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px;
+  }
+  .stat-card .k{ font-size:11px; color:var(--fg-dim); letter-spacing:1px; text-transform:uppercase; }
+  .stat-card .v{ font-size:19px; font-weight:700; margin-top:4px; color:var(--fg); }
+  .stat-card .v.chg-pos{ color:var(--green-fin); }
+  .stat-card .v.chg-neg{ color:var(--red); }
+
+  /* --- Numbered section cards --- */
+  .section-card{ margin-top:14px; }
+  .section-card-head{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    margin-bottom:6px;
+  }
+  .section-card-head h3{
+    margin:0; font-size:15.5px; font-weight:700; color:var(--fg);
+  }
+  .verdict-pill{
+    display:inline-block; padding:4px 14px; border-radius:999px; font-size:11.5px;
+    font-weight:700; letter-spacing:1px; white-space:nowrap;
+  }
+  .verdict-pill.pos{ background:rgba(23,163,92,0.16); color:var(--green-fin); }
+  .verdict-pill.neg{ background:rgba(255,23,68,0.14); color:var(--red); }
+  .verdict-reason{ font-size:12.5px; color:var(--fg-dim); margin-bottom:10px; }
+
+  .md-body{ font-size:14.5px; line-height:1.7; color:var(--fg); }
+  .md-body p{ margin:0 0 8px 0; }
+  .md-body ul{ margin:2px 0 12px 18px; padding:0; }
+  .md-body li{ margin-bottom:4px; }
+  .md-body strong{ color:var(--green-fin); }
+  .md-body em{ color:var(--amber); font-style:normal; }
+
+  table.md-table{ width:100%; border-collapse:collapse; margin:6px 0 14px 0; font-size:13px; border-radius:8px; overflow:hidden; }
+  table.md-table th, table.md-table td{ border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+  table.md-table th{ background:#161d26; color:var(--fg); text-transform:uppercase; font-size:11.5px; letter-spacing:.5px; }
+  table.md-table tr:nth-child(even) td{ background:#11161d; }
+
+  .checklist-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px; margin-bottom:14px; }
+  .checklist-item{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    border:1px solid var(--border); border-radius:10px; padding:9px 12px; font-size:13.5px;
+    background:#11161d;
+  }
+  .checklist-item .badge{ font-weight:700; white-space:nowrap; }
+  .checklist-item .badge.pos{ color:var(--green-fin); }
+  .checklist-item .badge.neg{ color:var(--red); }
+
+  .recommendation-banner{
+    padding:12px 18px; border-radius:10px; font-weight:700;
+    letter-spacing:1.5px; font-size:16px; margin-bottom:10px; text-align:center;
+  }
+  .recommendation-banner.pos{ background:rgba(23,163,92,0.14); color:var(--green-fin); }
+  .recommendation-banner.neg{ background:rgba(255,23,68,0.12); color:var(--red); }
+  .recommendation-banner.wait{ background:rgba(59,130,220,0.16); color:var(--blue); }
+
+  .disclaimer-note{ font-size:12.5px; color:var(--fg-dim); font-style:italic; margin-top:10px; }
+
+  .footer-note{ text-align:center; color:#5c5c5c; font-size:12.5px; margin-top:24px; letter-spacing:1px; }
+
+  /* ---------------- Export bar (PDF only) ---------------- */
+  .export-bar{
+    display:none; gap:12px; flex-wrap:wrap;
+    padding:16px 20px; border:1px solid var(--border); background:#0d1117; border-radius:14px;
+    margin-top:14px; align-items:center; justify-content:space-between;
+  }
+  .export-bar.show{ display:flex; }
+  .btn-export{
+    border:none; color:#04150c; background:var(--green-fin);
+    font-family:inherit; font-weight:700; letter-spacing:1.5px; font-size:13.5px; padding:12px 24px;
+    cursor:pointer; text-transform:uppercase; transition:all .15s ease; border-radius:999px;
+  }
+  .btn-export:hover{ filter:brightness(1.1); box-shadow:0 0 16px var(--green-dim); }
+
+  @media (max-width:640px){
+    .field{ flex:1 1 100%; }
+    .btn{ width:100%; }
+    .btn-row{ width:100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="header-bar">
+    <div class="brand"><span class="bar"></span> DEEP//TERMINAL <span style="color:var(--fg-dim);font-weight:400;letter-spacing:1px;">v1.0</span></div>
+    <div class="status-cluster">
+      <span><span class="dot"></span>STATUS: <b id="statusText">ONLINE</b></span>
+      <span>CLOCK: <b id="clock">00:00:00</b></span>
+      <span>LATENCY: <b id="latency">-- ms</b></span>
+      <span>SESSION: <b id="sessionId">-------</b></span>
+    </div>
+  </div>
+
+  <!-- COMMAND BAR -->
+  <div class="command-bar">
+    <div class="field" style="flex:2 1 320px;">
+      <label for="ticker">Stock Ticker (comma-separate up to 5, e.g. NVDA, AAPL, ITC)</label>
+      <input type="text" id="ticker" placeholder="NVDA, AAPL, ITC" maxlength="60" autocomplete="off">
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="searchBtn">[ Deep Search ]</button>
+    </div>
+  </div>
+
+  <!-- CONSOLE -->
+  <div class="console">
+    <div class="status-line" id="statusLine">SYSTEM READY — ENTER A TICKER AND RUN DEEP SEARCH<span class="cursor"></span></div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label"><span id="progressStage">INITIALIZING</span><span id="progressPct">0%</span></div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results" id="results"></div>
+
+  <!-- EXPORT BAR -->
+  <div class="export-bar" id="exportBar">
+    <span style="font-size:13.5px;color:var(--fg-dim);letter-spacing:1px;">REPORT_STATUS: <b class="glow" style="color:var(--green);">COMPLETE 100%</b></span>
+    <button class="btn-export" id="downloadPdf">Download PDF Report</button>
+  </div>
+
+  <div class="footer-note">DEEP//TERMINAL — AI-generated equity research. Not investment advice. Verify against live market data before trading.</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const API_BASE = ""; // same-origin FastAPI backend
+
+  const el = (id) => document.getElementById(id);
+  const tickerInput = el("ticker");
+  const searchBtn = el("searchBtn");
+  const statusLine = el("statusLine");
+  const progressWrap = el("progressWrap");
+  const progressFill = el("progressFill");
+  const progressStage = el("progressStage");
+  const progressPct = el("progressPct");
+  const resultsEl = el("results");
+  const exportBar = el("exportBar");
+  const downloadPdfBtn = el("downloadPdf");
+  const latencyEl = el("latency");
+  const sessionIdEl = el("sessionId");
+  const statusText = el("statusText");
+
+  let lastReportPayload = null;
+  let lastPdfUrl = null;
+
+  // ---------- Boot: clock, session id ----------
+  function pad(n){ return n.toString().padStart(2,"0"); }
+  function tickClock(){
+    const d = new Date();
+    el("clock").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  function randomId(prefix, len){
+    let s = "";
+    for(let i=0;i<len;i++) s += Math.floor(Math.random()*10);
+    return `${prefix}_${s}`;
+  }
+  sessionIdEl.textContent = randomId("SESS", 6);
+
+  // Auto-uppercase ticker field as the user types
+  tickerInput.addEventListener("input", () => {
+    const pos = tickerInput.selectionStart;
+    tickerInput.value = tickerInput.value.toUpperCase();
+    tickerInput.setSelectionRange(pos, pos);
+  });
+  tickerInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter") searchBtn.click();
+  });
+
+  function escapeHtml(str){
+    return String(str ?? "").replace(/[&<>"']/g, (c) => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+    }[c]));
+  }
+
+  // ---------- Single-line status helper (replaces the old scrolling log) ----------
+  function setStatus(text, cls){
+    statusLine.className = `status-line ${cls || ""}`;
+    statusLine.textContent = text;
+  }
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  // Rotating one-line phrases shown while the real request is in flight —
+  // no verbose scrolling log, just a simple "deep research in progress" feel.
+  const PROGRESS_PHRASES = [
+    "DEEP RESEARCH IN PROGRESS",
+    "SCANNING FINANCIALS & TECHNICALS",
+    "SEARCHING LIVE NEWS & CATALYSTS",
+    "SCORING VERDICT CHECKLIST",
+    "COMPILING REPORT",
+  ];
+
+  async function runBootAnimation(signal){
+    let pct = 0;
+    let phraseIdx = 0;
+    let dots = 0;
+    progressWrap.classList.add("show");
+    while(!signal.done){
+      const phrase = PROGRESS_PHRASES[phraseIdx % PROGRESS_PHRASES.length];
+      setStatus(phrase + ".".repeat(dots % 4));
+      progressStage.textContent = phrase;
+      pct = Math.min(96, pct + 3);
+      progressFill.style.width = pct + "%";
+      progressPct.textContent = Math.round(pct) + "%";
+      dots++;
+      if(dots % 4 === 0) phraseIdx++;
+      await sleep(450);
+    }
+  }
+
+  // ---------- Minimal markdown renderer (bold/italic, bullet lists, pipe tables) ----------
+  function mdInline(text){
+    let t = escapeHtml(text ?? "");
+    t = t.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>");
+    return t;
+  }
+  function isTableRow(line){
+    const t = line.trim();
+    return t.startsWith("|") && t.endsWith("|");
+  }
+  function isSeparatorRow(line){
+    const cells = line.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+    return cells.length > 0 && cells.every(c => /^:?-{2,}:?$/.test(c || "-"));
+  }
+  function renderMarkdown(mdText){
+    const lines = String(mdText ?? "").split("\n");
+    let html = "";
+    let para = [];
+    const flushPara = () => {
+      const text = para.join(" ").trim();
+      if(text) html += `<p>${mdInline(text)}</p>`;
+      para = [];
+    };
+    let i = 0;
+    while(i < lines.length){
+      const line = lines[i].trim();
+      if(!line){ flushPara(); i++; continue; }
+
+      if(isTableRow(line) && i+1 < lines.length && isSeparatorRow(lines[i+1])){
+        flushPara();
+        const headerCells = line.replace(/^\||\|$/g,"").split("|").map(c=>c.trim());
+        const rows = [];
+        let j = i + 2;
+        while(j < lines.length && isTableRow(lines[j].trim())){
+          rows.push(lines[j].trim().replace(/^\||\|$/g,"").split("|").map(c=>c.trim()));
+          j++;
+        }
+        html += `<table class="md-table"><thead><tr>${headerCells.map(c=>`<th>${mdInline(c)}</th>`).join("")}</tr></thead><tbody>`;
+        rows.forEach(r => {
+          html += `<tr>${headerCells.map((_,idx)=>`<td>${mdInline(r[idx] ?? "")}</td>`).join("")}</tr>`;
+        });
+        html += `</tbody></table>`;
+        i = j;
+        continue;
+      }
+
+      if(line.startsWith("- ") || line.startsWith("* ")){
+        flushPara();
+        const items = [];
+        while(i < lines.length && (lines[i].trim().startsWith("- ") || lines[i].trim().startsWith("* "))){
+          items.push(lines[i].trim().slice(2).trim());
+          i++;
+        }
+        html += `<ul>${items.map(it => `<li>${mdInline(it)}</li>`).join("")}</ul>`;
+        continue;
+      }
+
+      para.push(line);
+      i++;
+    }
+    flushPara();
+    return html;
+  }
+
+  function verdictClass(v){ return (v||"").toLowerCase() === "positive" ? "pos" : "neg"; }
+  function verdictLabel(v){ return (v||"").toLowerCase() === "positive" ? "PASS" : "FAIL"; }
+
+  const RECOMMENDATION_LABEL = { invest_now: "INVEST NOW", wait: "WAIT / ACCUMULATE GRADUALLY", avoid: "AVOID" };
+  function recommendationClass(rec){
+    rec = (rec||"").toLowerCase();
+    if(rec === "invest_now") return "pos";
+    if(rec === "avoid") return "neg";
+    return "wait";
+  }
+
+  // ---------- Result rendering (institutional-report card design) ----------
+  function renderTickerCard(entry){
+    const wrap = document.createElement("div");
+    wrap.style.display = "flex";
+    wrap.style.flexDirection = "column";
+    wrap.style.gap = "16px";
+
+    const change = Number(entry.change_percent ?? 0);
+    const changeCls = change >= 0 ? "chg-pos" : "chg-neg";
+    const changeStr = (change >= 0 ? "+" : "") + change + "%";
+    const final = entry.final_summary || {};
+    const rec = final.recommendation || "";
+
+    // --- Header card: name, exchange line, recommendation pill, stat strip ---
+    const headerCard = document.createElement("div");
+    headerCard.className = "report-card";
+    const statCards = [
+      { k: "Current Price", v: `${entry.current_price ?? "N/A"} ${entry.currency || ""}`, cls: "" },
+      { k: "Change", v: changeStr, cls: changeCls },
+      { k: "Market Cap", v: entry.market_cap || "N/A", cls: "" },
+      ...(entry.key_stats || []).map(s => ({ k: s.label, v: s.value, cls: "" })),
+    ];
+    headerCard.innerHTML = `
+      <div class="report-header">
+        <div>
+          <div class="sym">${escapeHtml(entry.ticker || "N/A")} — ${escapeHtml(entry.company_name || "")}</div>
+          <div class="company-sub">${escapeHtml(entry.exchange || "N/A")} &middot; ${escapeHtml(entry.sector || "")} &middot; Institutional Equity Research</div>
+        </div>
+        <span class="rec-pill ${recommendationClass(rec)}">${escapeHtml(RECOMMENDATION_LABEL[rec] || (rec || "N/A").toUpperCase())}</span>
+      </div>
+      <div class="stat-strip">
+        ${statCards.map(s => `
+          <div class="stat-card">
+            <div class="k">${escapeHtml(s.k)}</div>
+            <div class="v ${s.cls}">${escapeHtml(s.v)}</div>
+          </div>`).join("")}
+      </div>
+    `;
+    wrap.appendChild(headerCard);
+
+    // --- Numbered section cards ---
+    (entry.sections || []).forEach((section, idx) => {
+      const card = document.createElement("div");
+      card.className = "report-card section-card";
+      const head = document.createElement("div");
+      head.className = "section-card-head";
+      head.innerHTML = `
+        <h3>${String(idx + 1).padStart(2, "0")}. ${escapeHtml(section.title || "Section")}</h3>
+        <span class="verdict-pill ${verdictClass(section.verdict)}">${verdictLabel(section.verdict)}</span>
+      `;
+      card.appendChild(head);
+      const reason = document.createElement("div");
+      reason.className = "verdict-reason";
+      reason.textContent = section.verdict_reason || "";
+      card.appendChild(reason);
+      const body = document.createElement("div");
+      body.className = "md-body";
+      body.innerHTML = renderMarkdown(section.content_markdown || "");
+      card.appendChild(body);
+      wrap.appendChild(card);
+    });
+
+    // --- Final Summary card: checklist + recommendation + supporting/concern points ---
+    const finalCard = document.createElement("div");
+    finalCard.className = "report-card";
+    const finalHead = document.createElement("h3");
+    finalHead.textContent = "Final Summary";
+    finalHead.style.margin = "0 0 12px 0";
+    finalHead.style.fontSize = "15.5px";
+    finalCard.appendChild(finalHead);
+
+    const checklist = final.checklist || [];
+    if(checklist.length){
+      const grid = document.createElement("div");
+      grid.className = "checklist-grid";
+      checklist.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "checklist-item";
+        row.innerHTML = `<span>${escapeHtml(item.section || "")}</span><span class="badge ${verdictClass(item.verdict)}">${verdictLabel(item.verdict)}</span>`;
+        grid.appendChild(row);
+      });
+      finalCard.appendChild(grid);
+    }
+
+    const banner = document.createElement("div");
+    banner.className = `recommendation-banner ${recommendationClass(rec)}`;
+    banner.textContent = RECOMMENDATION_LABEL[rec] || (rec || "N/A").toUpperCase();
+    finalCard.appendChild(banner);
+
+    const summaryBody = document.createElement("div");
+    summaryBody.className = "md-body";
+    summaryBody.innerHTML = renderMarkdown(final.summary_text || "");
+    finalCard.appendChild(summaryBody);
+
+    if(entry.disclaimer){
+      const disc = document.createElement("div");
+      disc.className = "disclaimer-note";
+      disc.textContent = entry.disclaimer;
+      finalCard.appendChild(disc);
+    }
+    wrap.appendChild(finalCard);
+
+    // --- Forward price projection (best case, 24 months) ---
+    const projection = entry.price_projection;
+    if(projection && projection.prices && projection.prices.length){
+      const projCard = document.createElement("div");
+      projCard.className = "report-card";
+      const projHead = document.createElement("h3");
+      projHead.textContent = "Forward Price Projection — Next 24 Months (Best Case)";
+      projHead.style.margin = "0 0 12px 0";
+      projHead.style.fontSize = "15.5px";
+      projCard.appendChild(projHead);
+      const chartWrap = document.createElement("div");
+      chartWrap.innerHTML = buildLineChartSVG(projection.months, projection.prices);
+      projCard.appendChild(chartWrap);
+      const disc = document.createElement("div");
+      disc.className = "disclaimer-note";
+      disc.textContent = projection.disclaimer || "";
+      projCard.appendChild(disc);
+      if((projection.reasoning || []).length){
+        const ul = document.createElement("ul");
+        ul.style.margin = "10px 0 0 18px";
+        projection.reasoning.forEach(r => {
+          const li = document.createElement("li");
+          li.style.marginBottom = "4px";
+          li.style.fontSize = "14.5px";
+          li.textContent = r;
+          ul.appendChild(li);
+        });
+        projCard.appendChild(ul);
+      }
+      wrap.appendChild(projCard);
+    }
+
+    // --- Scorecard donut ---
+    const scorecard = entry.scorecard;
+    if(scorecard && scorecard.sections && scorecard.sections.length){
+      const scoreCard = document.createElement("div");
+      scoreCard.className = "report-card";
+      const scoreHead = document.createElement("h3");
+      scoreHead.textContent = "Scorecard";
+      scoreHead.style.margin = "0 0 12px 0";
+      scoreHead.style.fontSize = "15.5px";
+      scoreCard.appendChild(scoreHead);
+      const scoreBody = document.createElement("div");
+      scoreBody.innerHTML = buildScorecardSVG(scorecard);
+      scoreCard.appendChild(scoreBody);
+      wrap.appendChild(scoreCard);
+    }
+
+    return wrap;
+  }
+
+  // ---------- Price projection line chart (inline SVG) ----------
+  function buildLineChartSVG(months, prices){
+    const w = 640, h = 260, padL = 46, padR = 14, padT = 14, padB = 30;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+    const lo0 = Math.min(...prices), hi0 = Math.max(...prices);
+    const pad = (hi0 - lo0) * 0.08 || (hi0 * 0.05 || 1);
+    const lo = lo0 - pad, hi = hi0 + pad;
+
+    const xAt = (i) => padL + (i / (prices.length - 1)) * plotW;
+    const yAt = (p) => padT + plotH - ((p - lo) / (hi - lo)) * plotH;
+
+    let grid = "";
+    for(let k = 0; k <= 4; k++){
+      const gy = padT + plotH - (k / 4) * plotH;
+      const priceAt = lo + (hi - lo) * (k / 4);
+      grid += `<line x1="${padL}" y1="${gy}" x2="${w - padR}" y2="${gy}" stroke="var(--border)" stroke-width="1"/>`;
+      grid += `<text x="${padL - 8}" y="${gy + 4}" font-size="10.5" fill="var(--fg-dim)" text-anchor="end" font-family="inherit">${priceAt.toFixed(0)}</text>`;
+    }
+
+    let xLabels = "";
+    for(let i = 0; i < months.length; i += 3){
+      xLabels += `<text x="${xAt(i)}" y="${h - 8}" font-size="10.5" fill="var(--fg-dim)" text-anchor="middle" font-family="inherit">M${months[i]}</text>`;
+    }
+
+    const points = prices.map((p, i) => `${xAt(i)},${yAt(p)}`).join(" ");
+
+    const startLabel = `<circle cx="${xAt(0)}" cy="${yAt(prices[0])}" r="3.5" fill="var(--fg)"/>
+      <text x="${xAt(0)}" y="${yAt(prices[0]) - 10}" font-size="11" font-weight="700" fill="var(--fg)" font-family="inherit">${prices[0].toFixed(0)}</text>`;
+    const endLabel = `<circle cx="${xAt(prices.length-1)}" cy="${yAt(prices[prices.length-1])}" r="4" fill="var(--green-fin)"/>
+      <text x="${xAt(prices.length-1)}" y="${yAt(prices[prices.length-1]) - 10}" font-size="11" font-weight="700" fill="var(--green-fin)" text-anchor="end" font-family="inherit">${prices[prices.length-1].toFixed(0)}</text>`;
+
+    return `
+      <svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:${w}px;overflow:visible;">
+        ${grid}
+        <line x1="${padL}" y1="${padT + plotH}" x2="${w - padR}" y2="${padT + plotH}" stroke="var(--fg-dim)" stroke-width="1"/>
+        ${xLabels}
+        <polyline points="${points}" fill="none" stroke="var(--green-fin)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${startLabel}
+        ${endLabel}
+      </svg>`;
+  }
+
+  // ---------- Section 12: scorecard donut chart (inline SVG) ----------
+  function buildScorecardSVG(scorecard){
+    const sections = scorecard.sections || [];
+    const totalScore = scorecard.total_score ?? 0;
+    const maxScore = scorecard.max_score ?? 100;
+    const totalWeight = sections.reduce((a, s) => a + (s.weight || 0), 0) || 1;
+
+    const size = 180, cx = size / 2, cy = size / 2, r = size / 2 - 10, strokeW = r * 0.55;
+    const circumference = 2 * Math.PI * (r - strokeW / 2);
+    let offset = 0;
+    let segments = "";
+    sections.forEach(s => {
+      const frac = (s.weight || 0) / totalWeight;
+      const segLen = frac * circumference;
+      const color = s.verdict === "positive" ? "var(--green-fin)" : "var(--red)";
+      segments += `<circle cx="${cx}" cy="${cy}" r="${r - strokeW/2}" fill="none" stroke="${color}"
+        stroke-width="${strokeW}" stroke-dasharray="${segLen} ${circumference - segLen}"
+        stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      offset += segLen;
+    });
+
+    const legendRows = sections.map(s => `
+      <div class="checklist-item">
+        <span>${escapeHtml(s.title)} <span style="color:var(--fg-dim);">(${s.weight}pt)</span></span>
+        <span class="badge ${verdictClass(s.verdict)}">${verdictLabel(s.verdict)}</span>
+      </div>`).join("");
+
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center;">
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="flex-shrink:0;">
+          ${segments}
+          <text x="${cx}" y="${cy - 2}" font-size="30" font-weight="700" fill="var(--fg)" text-anchor="middle" font-family="inherit">${totalScore}</text>
+          <text x="${cx}" y="${cy + 20}" font-size="12" fill="var(--fg-dim)" text-anchor="middle" font-family="inherit">/ ${maxScore}</text>
+        </svg>
+        <div class="checklist-grid" style="flex:1 1 320px;">${legendRows}</div>
+      </div>`;
+  }
+
+  downloadPdfBtn.addEventListener("click", () => {
+    if(!lastPdfUrl){
+      setStatus("NO PDF AVAILABLE FOR THIS REPORT", "tag-err");
+      return;
+    }
+    window.open(lastPdfUrl, "_blank");
+  });
+
+  // ---------- Main search flow ----------
+  async function runDeepSearch(){
+    const ticker = tickerInput.value.trim();
+
+    if(!ticker){
+      tickerInput.focus();
+      tickerInput.style.borderColor = "var(--red)";
+      setTimeout(() => tickerInput.style.borderColor = "", 900);
+      return;
+    }
+
+    searchBtn.disabled = true;
+    resultsEl.classList.remove("show");
+    resultsEl.innerHTML = "";
+    exportBar.classList.remove("show");
+    progressFill.style.width = "0%";
+    progressPct.textContent = "0%";
+    progressStage.textContent = "INITIALIZING";
+    statusText.textContent = "BUSY";
+    setStatus("DEEP RESEARCH IN PROGRESS");
+
+    const signal = { done: false };
+    const bootPromise = runBootAnimation(signal);
+    const startedAt = performance.now();
+
+    let response, data;
+    try {
+      response = await fetch(`${API_BASE}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: ticker }),
+      });
+      data = await response.json();
+      if(!response.ok){
+        throw new Error(data.detail || `Request failed (${response.status})`);
+      }
+    } catch(err){
+      signal.done = true;
+      await bootPromise;
+      setStatus(err.message || "DEEP SEARCH FAILED — CHECK YOUR CONNECTION AND TRY AGAIN", "tag-err");
+      progressStage.textContent = "FAILED";
+      statusText.textContent = "ONLINE";
+      searchBtn.disabled = false;
+      return;
+    }
+
+    signal.done = true;
+    await bootPromise;
+
+    const elapsed = Math.round(performance.now() - startedAt);
+    latencyEl.textContent = `${data.latency_ms ?? elapsed} ms`;
+    sessionIdEl.textContent = data.session_id || sessionIdEl.textContent;
+
+    progressFill.style.width = "100%";
+    progressPct.textContent = "100%";
+    progressStage.textContent = "COMPLETE";
+    setStatus(`REPORT COMPLETE — LATENCY ${data.latency_ms ?? elapsed}ms`, "tag-ok");
+
+    lastReportPayload = data;
+    lastPdfUrl = data.pdf ? `${API_BASE}${data.pdf}` : null;
+
+    resultsEl.innerHTML = "";
+    (data.report.tickers || []).forEach(entry => {
+      resultsEl.appendChild(renderTickerCard(entry));
+    });
+    resultsEl.classList.add("show");
+    exportBar.classList.add("show");
+    statusText.textContent = "ONLINE";
+    searchBtn.disabled = false;
+
+    resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  searchBtn.addEventListener("click", runDeepSearch);
+})();
+</script>
+</body>
+</html>
