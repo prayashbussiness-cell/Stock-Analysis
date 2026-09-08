@@ -53,28 +53,52 @@ stock-terminal/
    (tables, bullets), rendered by a small markdown-to-HTML converter in the
    frontend.
 4. **Step 3 — server-side enrichment (not the model's job):**
+   - **Real live price/change%/market cap** are fetched from Yahoo Finance
+     (`market_data.py`, via the `yfinance` package — free, no API key) for
+     every ticker, concurrently with the grounded search step. These real
+     figures are injected into the prompt AND forcibly override whatever
+     the model guessed in its JSON response afterward — the model's price
+     is never trusted when a real quote was retrieved. Each ticker is
+     tagged `price_is_live: true/false` so the frontend/PDF can show a
+     "LIVE" vs "ESTIMATED" badge honestly instead of silently guessing.
    - The 25-point, 24-month price-projection path is generated in Python
-     (a seeded random walk with drift, pinned to the model's stated
-     current price and best-case target) — LLMs are unreliable at
-     producing a series that's simultaneously "realistically wiggly" and
-     "ends exactly at X".
-   - The scorecard's weighted total is computed in Python from the fixed
-     point allocation in `prompt.py`, from the verdicts the model returned
-     — never trusted as model arithmetic.
+     (a seeded random walk with drift, pinned to the *real* current price
+     when available, and the model's best-case target) — LLMs are
+     unreliable at producing a series that's simultaneously "realistically
+     wiggly" and "ends exactly at X".
+   - The scorecard's weighted total, and the Final Summary checklist, are
+     both computed in Python directly from each section's own `verdict`
+     field (matched by `id`, not by re-parsing free text) — never trusted
+     as model arithmetic, and never vulnerable to the model rewording a
+     section title slightly differently in two places (a real bug this
+     fixed: Gemini would sometimes write "Candlestick Analysis" in one
+     spot and "Candlestick Pattern Analysis" in another, which broke
+     naive title-string matching).
 5. `pdf_generator.py` turns the enriched JSON into a full PDF report,
    including the price-projection line chart and the scorecard donut chart
    (drawn with reportlab's graphics primitives, no extra dependencies).
 6. The frontend shows a simple "deep research in progress" status line +
    progress bar while all of this runs, then renders the full report,
-   charts included, plus TXT/PDF export.
-7. Optional: if `SUPABASE_URL`/`SUPABASE_KEY` are set, each search (analyst
-   id, tickers, latency) is logged to a Supabase table for history — this is
+   charts included, plus PDF export.
+7. Optional: if `SUPABASE_URL`/`SUPABASE_KEY` are set, each search
+   (tickers, latency) is logged to a Supabase table for history — this is
    best-effort and the app works fine without it.
 
-**Important:** only the news-search step touches live data. Everything
-else — financials, technicals, ratios — is Gemini's own trained knowledge,
-producing a plausible, internally consistent report, not real-time market
-data. Treat prices/ratios/targets accordingly.
+**Important:** only the live-quote step and the news-search step touch
+real data. Everything else — the qualitative analysis, technical levels,
+quarterly financial estimates, ratios — is still Gemini's own trained
+knowledge, producing a plausible, internally consistent report around the
+real price, not verified real-time fundamentals. Treat those parts
+accordingly.
+
+**A known limitation worth knowing about:** Yahoo Finance's data is
+unofficial/undocumented and can occasionally rate-limit or block requests
+from cloud provider IP ranges (including hosting platforms like Render).
+When that happens, `market_data.py` fails gracefully and the report falls
+back to the model's estimate — clearly marked "ESTIMATED" rather than
+pretending it's live. If live quotes stop working entirely, try
+`pip install -U yfinance` first (Yahoo's internal endpoints change
+occasionally and new yfinance releases track those changes).
 
 ## Local setup
 

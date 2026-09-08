@@ -24,6 +24,7 @@ import math
 import time
 import uuid
 import random
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -49,6 +50,7 @@ try:
         build_user_prompt,
     )
     from pdf_generator import generate_pdf
+    from market_data import fetch_live_quotes
 except ImportError:
     # Works when the app is run from the repo root (uvicorn backend.main:app).
     from backend.prompt import (
@@ -62,6 +64,7 @@ except ImportError:
         build_user_prompt,
     )
     from backend.pdf_generator import generate_pdf
+    from backend.market_data import fetch_live_quotes
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -331,18 +334,41 @@ def rebuild_final_checklist(entry: dict) -> list:
 
 async def generate_research_report(tickers: list[str]) -> dict:
     """Calls Gemini and returns the parsed structured report dict, enriched
-    with a server-computed price_projection and scorecard per ticker."""
+    with real live quotes, a server-computed price_projection, and a
+    scorecard per ticker."""
     if gemini_client is None:
         raise RuntimeError(
             "GEMINI_API_KEY is not configured on the server. Set it in your "
             ".env file (or Render environment variables) before starting the backend."
         )
 
-    # Step 1: real mutual-fund + news data via Google Search grounding.
-    grounded_context = await fetch_grounded_context(tickers)
+    # Step 1: real mutual-fund + news data via Google Search grounding, AND
+    # real live price/change/market-cap via Yahoo Finance — run concurrently
+    # since they're independent of each other.
+    grounded_context, live_quotes = await asyncio.gather(
+        fetch_grounded_context(tickers),
+        fetch_live_quotes(tickers),
+    )
 
-    # Step 2: main structured report call, informed by that grounded context.
-    user_prompt = build_user_prompt(tickers=", ".join(tickers), grounded_context=grounded_context)
+    if live_quotes:
+        live_quotes_lines = "\n".join(
+            f"- {t}: {q['current_price']} {q['currency']} "
+            f"({'+' if q['change_percent'] >= 0 else ''}{q['change_percent']}%), "
+            f"market cap {q['market_cap']}"
+            for t, q in live_quotes.items()
+        )
+    else:
+        live_quotes_lines = "No live quotes could be retrieved for these tickers."
+
+    # Step 2: main structured report call, informed by the grounded context
+    # AND told to use the real live prices verbatim (still overridden
+    # server-side afterwards regardless — see below — so this is belt AND
+    # suspenders, not the only safeguard).
+    user_prompt = build_user_prompt(
+        tickers=", ".join(tickers),
+        grounded_context=grounded_context,
+        live_quotes_context=live_quotes_lines,
+    )
 
     # The 11-section report (with quarterly/valuation/pivot/news/mutual-fund
     # tables per section) is far longer than a flat-schema report, so scale
@@ -377,8 +403,25 @@ async def generate_research_report(tickers: list[str]) -> dict:
     if "tickers" not in data or not isinstance(data["tickers"], list) or not data["tickers"]:
         raise RuntimeError("The model response was missing report data. Please try again.")
 
-    # Step 3: server-side enrichment — price projection path + scorecard.
+    # Step 3: server-side enrichment — REAL price override, price projection
+    # path, and scorecard. None of these are trusted from the model's own
+    # arithmetic/estimates.
     for entry in data["tickers"]:
+        ticker_key = (entry.get("ticker") or "").strip().upper()
+        live = live_quotes.get(ticker_key)
+        if live:
+            # Never trust the model's guessed price when we have a real one.
+            entry["current_price"] = live["current_price"]
+            entry["change_percent"] = live["change_percent"]
+            entry["currency"] = live["currency"]
+            if live.get("market_cap") and live["market_cap"] != "N/A":
+                entry["market_cap"] = live["market_cap"]
+            entry["price_is_live"] = True
+            entry["price_as_of"] = datetime.now(timezone.utc).isoformat()
+        else:
+            entry["price_is_live"] = False
+            entry["price_as_of"] = None
+
         current_price = entry.get("current_price")
         target_price = entry.get("best_case_target_price")
         seed = f"{entry.get('ticker', '')}-{datetime.now().strftime('%Y%m%d%H')}"

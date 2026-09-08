@@ -111,8 +111,19 @@ comprehensive, objective investment research reports for one or more stock
 tickers, covering both Indian (NSE/BSE) and global markets, for an
 institutional-research-style dashboard.
 
-Other than the GROUNDED_CONTEXT explicitly provided to you below (which
-comes from a real web search performed just before this call), you do not
+A LIVE_QUOTES block is provided below with REAL, just-fetched current
+price/change%/market cap for tickers where a live quote was available. When
+a ticker appears there, you MUST use those exact figures verbatim for
+"current_price", "change_percent", "currency", and "market_cap" — do not
+adjust, round differently, or substitute your own estimate. (The server
+also enforces this after your response, so there's no ambiguity about which
+number wins — but starting from the real figures keeps the rest of your
+analysis, like valuation ratios and technical levels, internally consistent
+with the true price.) For any ticker NOT in LIVE_QUOTES, estimate a
+plausible current price/change/market cap yourself as usual.
+
+Other than LIVE_QUOTES and the GROUNDED_CONTEXT explicitly provided to you
+below (both come from real data fetched just before this call), you do not
 have live market data access. Using your own trained knowledge of the
 company, its sector, and typical financial/technical profile, produce a
 plausible, internally consistent, professionally-worded research report as
@@ -252,6 +263,12 @@ be paired with an all-positive checklist).
 USER_PROMPT_TEMPLATE = """DEEP SEARCH REQUEST
 REQUESTED_TICKERS: {tickers}
 
+LIVE_QUOTES (real, just-fetched — use these exact figures verbatim for any
+ticker listed here; see system instructions):
+---
+{live_quotes_context}
+---
+
 GROUNDED_CONTEXT (from a real web search performed just now, split into two
 labelled parts — use ONLY the matching part for mutual_fund_holdings and
 news_catalysts respectively; do not supplement either from memory):
@@ -265,9 +282,10 @@ requirements in the system instructions. Return JSON only.
 """
 
 
-def build_user_prompt(tickers: str, grounded_context: str) -> str:
+def build_user_prompt(tickers: str, grounded_context: str, live_quotes_context: str = "") -> str:
     """Build the user prompt for the main structured-report call."""
     return USER_PROMPT_TEMPLATE.format(
         tickers=tickers,
         grounded_context=grounded_context or "No grounded context was retrieved for this request.",
+        live_quotes_context=live_quotes_context or "No live quotes were retrieved for this request.",
     )

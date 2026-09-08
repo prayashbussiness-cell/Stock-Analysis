@@ -232,6 +232,9 @@
   .stat-card .v{ font-size:19px; font-weight:700; margin-top:4px; color:var(--fg); }
   .stat-card .v.chg-pos{ color:var(--green-fin); }
   .stat-card .v.chg-neg{ color:var(--red); }
+  .live-badge{ font-size:9.5px; letter-spacing:.5px; padding:1px 6px; border-radius:999px; font-weight:700; text-transform:none; }
+  .live-badge.live{ background:rgba(23,163,92,0.18); color:var(--green-fin); }
+  .live-badge.est{ background:rgba(212,167,44,0.18); color:var(--amber); }
 
   /* --- Numbered section cards --- */
   .section-card{ margin-top:14px; }
@@ -530,15 +533,17 @@
     const changeStr = (change >= 0 ? "+" : "") + change + "%";
     const final = entry.final_summary || {};
     const rec = final.recommendation || "";
+    const isLive = !!entry.price_is_live;
+    const liveBadge = `<span class="live-badge ${isLive ? "live" : "est"}">${isLive ? "● LIVE" : "ESTIMATED"}</span>`;
 
     // --- Header card: name, exchange line, recommendation pill, stat strip ---
     const headerCard = document.createElement("div");
     headerCard.className = "report-card";
     const statCards = [
-      { k: "Current Price", v: `${entry.current_price ?? "N/A"} ${entry.currency || ""}`, cls: "" },
-      { k: "Change", v: changeStr, cls: changeCls },
-      { k: "Market Cap", v: entry.market_cap || "N/A", cls: "" },
-      ...(entry.key_stats || []).map(s => ({ k: s.label, v: s.value, cls: "" })),
+      { k: "Current Price", v: `${entry.current_price ?? "N/A"} ${entry.currency || ""}`, cls: "", badge: liveBadge },
+      { k: "Change", v: changeStr, cls: changeCls, badge: "" },
+      { k: "Market Cap", v: entry.market_cap || "N/A", cls: "", badge: "" },
+      ...(entry.key_stats || []).map(s => ({ k: s.label, v: s.value, cls: "", badge: "" })),
     ];
     headerCard.innerHTML = `
       <div class="report-header">
@@ -551,10 +556,11 @@
       <div class="stat-strip">
         ${statCards.map(s => `
           <div class="stat-card">
-            <div class="k">${escapeHtml(s.k)}</div>
+            <div class="k">${escapeHtml(s.k)} ${s.badge}</div>
             <div class="v ${s.cls}">${escapeHtml(s.v)}</div>
           </div>`).join("")}
       </div>
+      ${!isLive ? `<div class="disclaimer-note" style="margin-top:10px;">Live price lookup was unavailable for this ticker — price/change/market cap above are the model's estimate, not a real quote.</div>` : ""}
     `;
     wrap.appendChild(headerCard);
 

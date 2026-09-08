@@ -218,13 +218,23 @@ def _ticker_flowables(entry: dict, styles) -> list:
     mcap = entry.get("market_cap", "N/A")
 
     change_str = f"{'+' if change is not None and change >= 0 else ''}{change}%"
+    is_live = bool(entry.get("price_is_live"))
+    live_tag = "[LIVE]" if is_live else "[ESTIMATED]"
     flowables.append(Paragraph(f"[ {ticker} ] {company}", styles["TickerHeading"]))
     flowables.append(HRFlowable(width="100%", thickness=1, color=colors.black, spaceAfter=6))
     flowables.append(Paragraph(
         f"{exchange} &bull; {sector} &bull; PRICE: {price} {currency} "
-        f"({change_str}) &bull; MKT CAP: {mcap}",
+        f"({change_str}) {live_tag} &bull; MKT CAP: {mcap}",
         styles["TickerSub"],
     ))
+    if not is_live:
+        est_style = ParagraphStyle(
+            "estnote", fontName="Courier-Oblique", fontSize=7.5, leading=10, textColor=MUTED_GRAY, spaceAfter=4
+        )
+        flowables.append(Paragraph(
+            "Live price lookup was unavailable for this ticker — price/change/market cap above are the model's estimate, not a real quote.",
+            est_style,
+        ))
 
     key_stats = entry.get("key_stats") or []
     if key_stats:

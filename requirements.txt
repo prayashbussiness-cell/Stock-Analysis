@@ -4,3 +4,4 @@ google-genai>=1.0.0,<2.0.0
 supabase>=2.20.0,<3.0.0
 reportlab==4.2.5
 python-dotenv==1.0.1
+yfinance>=0.2.40,<1.0.0
